@@ -71,6 +71,7 @@ object V2RayServiceManager {
         if (!Utils.isValidUrl(config.server) && !Utils.isIpAddress(config.server)) return
 //        val result = V2rayConfigUtil.getV2rayConfig(context, guid)
 //        if (!result.status) return
+        Log.d(ANG_PACKAGE, "yutest start")
 
         if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING) == true) {
             context.toast(R.string.toast_warning_pref_proxysharing_short)
