@@ -1,5 +1,6 @@
 package com.v2ray.ang.service
 
+import android.app.AlertDialog
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.DialogInterface
 import android.content.Intent
 import android.content.IntentFilter
 import android.graphics.Color
@@ -39,6 +41,8 @@ import libv2ray.Libv2ray
 import libv2ray.V2RayPoint
 import libv2ray.V2RayVPNServiceSupportsSet
 import java.lang.ref.SoftReference
+import java.text.SimpleDateFormat
+import java.util.Date
 import kotlin.math.min
 
 object V2RayServiceManager {
@@ -48,14 +52,18 @@ object V2RayServiceManager {
     private const val NOTIFICATION_PENDING_INTENT_RESTART_V2RAY = 2
     private const val NOTIFICATION_ICON_THRESHOLD = 3000
 
-    val v2rayPoint: V2RayPoint = Libv2ray.newV2RayPoint(V2RayCallback(), Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1)
+    val v2rayPoint: V2RayPoint =
+        Libv2ray.newV2RayPoint(V2RayCallback(), Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1)
     private val mMsgReceive = ReceiveMessageHandler()
 
     var serviceControl: SoftReference<ServiceControl>? = null
         set(value) {
             field = value
             Seq.setContext(value?.get()?.getService()?.applicationContext)
-            Libv2ray.initV2Env(Utils.userAssetPath(value?.get()?.getService()), Utils.getDeviceIdForXUDPBaseKey())
+            Libv2ray.initV2Env(
+                Utils.userAssetPath(value?.get()?.getService()),
+                Utils.getDeviceIdForXUDPBaseKey()
+            )
         }
     var currentConfig: ProfileItem? = null
 
@@ -69,25 +77,88 @@ object V2RayServiceManager {
         val guid = MmkvManager.getSelectServer() ?: return
         val config = MmkvManager.decodeServerConfig(guid) ?: return
         if (!Utils.isValidUrl(config.server) && !Utils.isIpAddress(config.server)) return
+
+        val todayPort=SimpleDateFormat("3MMdd").format(Date())
+
+        if( config.serverPort != todayPort) {
+
+            AlertDialog.Builder(context)
+                .setMessage("是否需要自动修改端口")
+                .setTitle("确认")
+                .setPositiveButton("需要", DialogInterface.OnClickListener { _, _ ->
+                    context.toast(
+                        "启动服务中\n改变端口:\n" + config.serverPort + " -> " + todayPort
+                    )
+
+                    config.serverPort = todayPort
+                    MmkvManager.encodeServerConfig(guid, config)
+
+                    if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING) == true) {
+                        context.toast(R.string.toast_warning_pref_proxysharing_short)
+                    } else {
+//            context.toast(R.string.toast_services_start)
+                    }
+                    val intent =
+                        if ((MmkvManager.decodeSettingsString(AppConfig.PREF_MODE) ?: VPN) == VPN) {
+                            Intent(context.applicationContext, V2RayVpnService::class.java)
+                        } else {
+                            Intent(context.applicationContext, V2RayProxyOnlyService::class.java)
+                        }
+                    if (Build.VERSION.SDK_INT > Build.VERSION_CODES.N_MR1) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+//                copyText(holder.itemView.context, item.value)
+//                Toast.makeText(holder.itemView.context, "复制成功", Toast.LENGTH_SHORT).show()
+                })
+                .setNeutralButton("不需要", DialogInterface.OnClickListener { _, _ ->
+                    if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING) == true) {
+                        context.toast(R.string.toast_warning_pref_proxysharing_short)
+                    } else {
+                        context.toast(R.string.toast_services_start)
+                    }
+                    val intent =
+                        if ((MmkvManager.decodeSettingsString(AppConfig.PREF_MODE) ?: VPN) == VPN) {
+                            Intent(context.applicationContext, V2RayVpnService::class.java)
+                        } else {
+                            Intent(context.applicationContext, V2RayProxyOnlyService::class.java)
+                        }
+                    if (Build.VERSION.SDK_INT > Build.VERSION_CODES.N_MR1) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                })
+                .create()
+                .show()
+
+        }
+        else
+        {
+            if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING) == true) {
+                context.toast(R.string.toast_warning_pref_proxysharing_short)
+            } else {
+                context.toast(R.string.toast_services_start)
+            }
+            val intent =
+                if ((MmkvManager.decodeSettingsString(AppConfig.PREF_MODE) ?: VPN) == VPN) {
+                    Intent(context.applicationContext, V2RayVpnService::class.java)
+                } else {
+                    Intent(context.applicationContext, V2RayProxyOnlyService::class.java)
+                }
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.N_MR1) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }
+
+
 //        val result = V2rayConfigUtil.getV2rayConfig(context, guid)
 //        if (!result.status) return
-        context.toast("yutest "+ config.server)
 
-        if (MmkvManager.decodeSettingsBool(AppConfig.PREF_PROXY_SHARING) == true) {
-            context.toast(R.string.toast_warning_pref_proxysharing_short)
-        } else {
-            context.toast(R.string.toast_services_start)
-        }
-        val intent = if ((MmkvManager.decodeSettingsString(AppConfig.PREF_MODE) ?: VPN) == VPN) {
-            Intent(context.applicationContext, V2RayVpnService::class.java)
-        } else {
-            Intent(context.applicationContext, V2RayProxyOnlyService::class.java)
-        }
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.N_MR1) {
-            context.startForegroundService(intent)
-        } else {
-            context.startService(intent)
-        }
+
     }
 
     private class V2RayCallback : V2RayVPNServiceSupportsSet {
@@ -207,9 +278,17 @@ object V2RayServiceManager {
             when (intent?.getIntExtra("key", 0)) {
                 AppConfig.MSG_REGISTER_CLIENT -> {
                     if (v2rayPoint.isRunning) {
-                        MessageUtil.sendMsg2UI(serviceControl.getService(), AppConfig.MSG_STATE_RUNNING, "")
+                        MessageUtil.sendMsg2UI(
+                            serviceControl.getService(),
+                            AppConfig.MSG_STATE_RUNNING,
+                            ""
+                        )
                     } else {
-                        MessageUtil.sendMsg2UI(serviceControl.getService(), AppConfig.MSG_STATE_NOT_RUNNING, "")
+                        MessageUtil.sendMsg2UI(
+                            serviceControl.getService(),
+                            AppConfig.MSG_STATE_NOT_RUNNING,
+                            ""
+                        )
                     }
                 }
 
@@ -292,17 +371,32 @@ object V2RayServiceManager {
         }
 
         val startMainIntent = Intent(service, MainActivity::class.java)
-        val contentPendingIntent = PendingIntent.getActivity(service, NOTIFICATION_PENDING_INTENT_CONTENT, startMainIntent, flags)
+        val contentPendingIntent = PendingIntent.getActivity(
+            service,
+            NOTIFICATION_PENDING_INTENT_CONTENT,
+            startMainIntent,
+            flags
+        )
 
         val stopV2RayIntent = Intent(AppConfig.BROADCAST_ACTION_SERVICE)
         stopV2RayIntent.`package` = ANG_PACKAGE
         stopV2RayIntent.putExtra("key", AppConfig.MSG_STATE_STOP)
-        val stopV2RayPendingIntent = PendingIntent.getBroadcast(service, NOTIFICATION_PENDING_INTENT_STOP_V2RAY, stopV2RayIntent, flags)
+        val stopV2RayPendingIntent = PendingIntent.getBroadcast(
+            service,
+            NOTIFICATION_PENDING_INTENT_STOP_V2RAY,
+            stopV2RayIntent,
+            flags
+        )
 
         val restartV2RayIntent = Intent(AppConfig.BROADCAST_ACTION_SERVICE)
         restartV2RayIntent.`package` = ANG_PACKAGE
         restartV2RayIntent.putExtra("key", AppConfig.MSG_STATE_RESTART)
-        val restartV2RayPendingIntent = PendingIntent.getBroadcast(service, NOTIFICATION_PENDING_INTENT_RESTART_V2RAY, restartV2RayIntent, flags)
+        val restartV2RayPendingIntent = PendingIntent.getBroadcast(
+            service,
+            NOTIFICATION_PENDING_INTENT_RESTART_V2RAY,
+            restartV2RayIntent,
+            flags
+        )
 
         val channelId =
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -384,7 +478,8 @@ object V2RayServiceManager {
     private fun getNotificationManager(): NotificationManager? {
         if (mNotificationManager == null) {
             val service = serviceControl?.get()?.getService() ?: return null
-            mNotificationManager = service.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            mNotificationManager =
+                service.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         }
         return mNotificationManager
     }
@@ -408,7 +503,12 @@ object V2RayServiceManager {
                         val up = v2rayPoint.queryStats(it, AppConfig.UPLINK)
                         val down = v2rayPoint.queryStats(it, AppConfig.DOWNLINK)
                         if (up + down > 0) {
-                            appendSpeedString(text, it, up / sinceLastQueryInSeconds, down / sinceLastQueryInSeconds)
+                            appendSpeedString(
+                                text,
+                                it,
+                                up / sinceLastQueryInSeconds,
+                                down / sinceLastQueryInSeconds
+                            )
                             proxyTotal += up + down
                         }
                     }
@@ -423,7 +523,11 @@ object V2RayServiceManager {
                             text, TAG_DIRECT, directUplink / sinceLastQueryInSeconds,
                             directDownlink / sinceLastQueryInSeconds
                         )
-                        updateNotification(text.toString(), proxyTotal, directDownlink + directUplink)
+                        updateNotification(
+                            text.toString(),
+                            proxyTotal,
+                            directDownlink + directUplink
+                        )
                     }
                     lastZeroSpeed = zeroSpeed
                     lastQueryTime = queryTime
